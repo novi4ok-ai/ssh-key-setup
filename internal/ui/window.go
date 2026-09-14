@@ -254,6 +254,9 @@ func (v *View) finish(result setup.Result, err error) {
 	if result.KeyPath != "" {
 		v.logs = append(v.logs, "Закрытый ключ: "+result.KeyPath)
 	}
+	if result.ConfigPath != "" {
+		v.logs = append(v.logs, "Конфигурация SSH: "+result.ConfigPath)
+	}
 	if result.Fingerprint != "" {
 		v.logs = append(v.logs, "Отпечаток сервера: "+result.Fingerprint)
 	}

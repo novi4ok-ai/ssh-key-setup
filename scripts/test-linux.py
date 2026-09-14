@@ -11,6 +11,7 @@ IMAGES = ["debian:12", "debian:13", "ubuntu:22.04", "ubuntu:24.04", "ubuntu:26.0
 def check(image):
     dist = Path(__file__).resolve().parents[1] / "dist"
     for args, code, expected in [
+        ([], 0, "ИСПОЛЬЗОВАНИЕ"),
         (["-version"], 0, "SSH Key Setup"),
         (["-help"], 0, "-ip"),
         (["-ip", "127.0.0.1", "-u", "root", "-p", "fixture", "-port", "0"], 2, "65535"),

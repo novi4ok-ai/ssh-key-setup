@@ -109,6 +109,35 @@ func TestLocalProtection(t *testing.T) {
 	if _, err = readPrivate(link); err == nil {
 		t.Fatal("followed symlink")
 	}
+	if err = os.Symlink(keyPath, filepath.Join(dir, "config")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = configureClient(dir, c, keyPath); err == nil {
+		t.Fatal("followed symlink config")
+	}
+}
+
+func TestClientConfigFormattingAndDamage(t *testing.T) {
+	quoted, err := sshConfigQuote("/home/name with \"quotes\"/key")
+	if err != nil || quoted != "\"/home/name with \\\"quotes\\\"/key\"" {
+		t.Fatalf("quoted path: %q, %v", quoted, err)
+	}
+	if _, err = sshConfigQuote("/home/name\nHost */key"); err == nil {
+		t.Fatal("accepted newline in key path")
+	}
+	begin, end := "# >>> ssh-key-setup key", "# <<< ssh-key-setup key"
+	original := []byte("Host old\n    Port 2200\n")
+	if got, err := removeManagedBlock(original, begin, end); err != nil || !bytes.Equal(got, original) {
+		t.Fatalf("changed unmanaged config: %q, %v", got, err)
+	}
+	damaged := []byte(begin + "\nHost example\n")
+	if _, err := removeManagedBlock(damaged, begin, end); err == nil {
+		t.Fatal("accepted damaged managed block")
+	}
+	duplicate := []byte(begin + "\n" + end + "\n" + begin + "\n" + end + "\n")
+	if _, err := removeManagedBlock(duplicate, begin, end); err == nil {
+		t.Fatal("accepted duplicate managed blocks")
+	}
 }
 
 type testServer struct {
@@ -248,6 +277,14 @@ func TestSSHSetupEndToEnd(t *testing.T) {
 	s := startTestServer(t)
 	home := t.TempDir()
 	service := Service{Home: home}
+	localDir := filepath.Join(home, ".ssh")
+	if err := os.Mkdir(localDir, 0700); err != nil {
+		t.Fatal(err)
+	}
+	originalConfig := []byte("# Existing SSH settings must remain byte-for-byte\nHost *\n    ServerAliveInterval 30\n")
+	if err := os.WriteFile(filepath.Join(localDir, "config"), originalConfig, 0644); err != nil {
+		t.Fatal(err)
+	}
 	remoteDir := filepath.Join(s.home, ".ssh")
 	if err := os.Mkdir(remoteDir, 0700); err != nil {
 		t.Fatal(err)
@@ -262,8 +299,18 @@ func TestSSHSetupEndToEnd(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if result.Command == "" || result.BackupPath == "" || s.publicCalls.Load() == 0 {
+	if result.Command != "ssh tester@127.0.0.1" || result.ConfigPath != filepath.Join(localDir, "config") || result.BackupPath == "" || s.publicCalls.Load() == 0 {
 		t.Fatal("missing verification or backup")
+	}
+	clientConfig, err := os.ReadFile(result.ConfigPath)
+	if err != nil || !bytes.HasSuffix(clientConfig, originalConfig) ||
+		!bytes.Contains(clientConfig, []byte("IdentityFile \""+result.KeyPath+"\"")) ||
+		!bytes.Contains(clientConfig, []byte("Match originalhost 127.0.0.1 user tester")) {
+		t.Fatalf("client config is invalid or existing settings changed: %v\n%s", err, clientConfig)
+	}
+	configInfo, err := os.Stat(result.ConfigPath)
+	if err != nil || configInfo.Mode().Perm() != 0600 {
+		t.Fatalf("unsafe client config permissions: %v", err)
 	}
 	backup, err := os.ReadFile(result.BackupPath)
 	if err != nil || !bytes.Equal(backup, original) {
@@ -288,7 +335,9 @@ func TestSSHSetupEndToEnd(t *testing.T) {
 	}
 	after, _ := os.ReadFile(authorized)
 	knownAfter, _ := os.ReadFile(knownPath)
-	if !bytes.Equal(installed, after) || !bytes.Equal(knownBefore, knownAfter) {
+	configAfter, _ := os.ReadFile(result.ConfigPath)
+	if !bytes.Equal(installed, after) || !bytes.Equal(knownBefore, knownAfter) || !bytes.Equal(clientConfig, configAfter) ||
+		bytes.Count(configAfter, []byte("# >>> ssh-key-setup ")) != 1 {
 		t.Fatal("repeat added duplicates")
 	}
 	passwordCalls := s.passwordCalls.Load()

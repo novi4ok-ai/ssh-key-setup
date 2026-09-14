@@ -5,12 +5,15 @@ import (
 	"crypto/ed25519"
 	"crypto/rand"
 	"crypto/sha256"
+	"encoding/hex"
 	"encoding/pem"
 	"errors"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
+	"strconv"
+	"strings"
 	"syscall"
 
 	"golang.org/x/crypto/ssh"
@@ -153,4 +156,145 @@ func keyFor(dir string, c Config) (ssh.Signer, string, error) {
 		return nil, keyPath, err
 	}
 	return signer, keyPath, nil
+}
+
+func configureClient(dir string, c Config, keyPath string) (string, error) {
+	quotedKey, err := sshConfigQuote(keyPath)
+	if err != nil {
+		return "", err
+	}
+	id := filepath.Base(keyPath)
+	begin := "# >>> ssh-key-setup " + id
+	end := "# <<< ssh-key-setup " + id
+	block := []byte(begin + "\n" +
+		"Host " + c.Host + "\n" +
+		"    User " + c.User + "\n" +
+		"    Port " + strconv.Itoa(c.Port) + "\n\n" +
+		"Match originalhost " + c.Host + " user " + c.User + "\n" +
+		"    IdentityFile " + quotedKey + "\n" +
+		"    IdentitiesOnly yes\n\n" +
+		"Host *\n" + end + "\n\n")
+
+	filename := filepath.Join(dir, "config")
+	original, err := readPrivate(filename)
+	exists := err == nil
+	if errors.Is(err, os.ErrNotExist) {
+		original = nil
+	} else if err != nil {
+		return "", fmt.Errorf("не удалось прочитать %s: %w", filename, err)
+	}
+	remaining, err := removeManagedBlock(original, begin, end)
+	if err != nil {
+		return "", fmt.Errorf("не удалось обновить %s: %w", filename, err)
+	}
+	updated := append(bytes.Clone(block), remaining...)
+	if len(updated) > maxFileSize {
+		return "", fmt.Errorf("%s после обновления превысит 4 МиБ", filename)
+	}
+	if bytes.Equal(updated, original) {
+		return filename, nil
+	}
+
+	var random [12]byte
+	if _, err = rand.Read(random[:]); err != nil {
+		return "", err
+	}
+	temp := filename + ".ssh-key-setup-" + hex.EncodeToString(random[:])
+	if err = writeNewPrivate(temp, updated); err != nil {
+		return "", fmt.Errorf("не удалось записать временный SSH config: %w", err)
+	}
+	defer os.Remove(temp)
+
+	current, currentErr := readPrivate(filename)
+	currentExists := currentErr == nil
+	if errors.Is(currentErr, os.ErrNotExist) {
+		current = nil
+	} else if currentErr != nil {
+		return "", currentErr
+	}
+	if currentExists != exists || !bytes.Equal(current, original) {
+		return "", fmt.Errorf("%s изменён другой программой; повторите настройку", filename)
+	}
+	if err = os.Rename(temp, filename); err != nil {
+		return "", err
+	}
+	directory, err := os.Open(dir)
+	if err != nil {
+		return "", err
+	}
+	err = directory.Sync()
+	closeErr := directory.Close()
+	if err != nil {
+		return "", err
+	}
+	if closeErr != nil {
+		return "", closeErr
+	}
+	return filename, nil
+}
+
+func sshConfigQuote(value string) (string, error) {
+	if strings.ContainsAny(value, "\x00\r\n") {
+		return "", fmt.Errorf("путь к ключу содержит символ, недопустимый в SSH config")
+	}
+	value = strings.ReplaceAll(value, "\\", "\\\\")
+	value = strings.ReplaceAll(value, "\"", "\\\"")
+	return "\"" + value + "\"", nil
+}
+
+func removeManagedBlock(data []byte, begin, end string) ([]byte, error) {
+	start, _ := findConfigLine(data, begin, 0)
+	if start < 0 {
+		return bytes.Clone(data), nil
+	}
+	if another, _ := findConfigLine(data, begin, start+len(begin)); another >= 0 {
+		return nil, fmt.Errorf("найдено несколько управляемых блоков %s", begin)
+	}
+	_, finish := findConfigLine(data, end, start+len(begin))
+	if finish < 0 {
+		return nil, fmt.Errorf("управляемый блок повреждён: отсутствует строка %q", end)
+	}
+	if finish < len(data) {
+		if data[finish] == '\n' {
+			finish++
+		} else if finish+1 < len(data) && data[finish] == '\r' && data[finish+1] == '\n' {
+			finish += 2
+		}
+	}
+	// The generated block owns one blank separator line.
+	if finish < len(data) {
+		if data[finish] == '\n' {
+			finish++
+		} else if finish+1 < len(data) && data[finish] == '\r' && data[finish+1] == '\n' {
+			finish += 2
+		}
+	}
+	result := make([]byte, 0, len(data)-(finish-start))
+	result = append(result, data[:start]...)
+	result = append(result, data[finish:]...)
+	return result, nil
+}
+
+// Return the start and first byte after a complete line, excluding its newline.
+func findConfigLine(data []byte, expected string, offset int) (int, int) {
+	for offset <= len(data) {
+		lineEnd := bytes.IndexByte(data[offset:], '\n')
+		if lineEnd < 0 {
+			lineEnd = len(data)
+		} else {
+			lineEnd += offset
+		}
+		contentEnd := lineEnd
+		if contentEnd > offset && data[contentEnd-1] == '\r' {
+			contentEnd--
+		}
+		if string(data[offset:contentEnd]) == expected {
+			return offset, lineEnd
+		}
+		if lineEnd == len(data) {
+			break
+		}
+		offset = lineEnd + 1
+	}
+	return -1, -1
 }

@@ -15,6 +15,7 @@ COPY internal ./internal
 RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/ssh-key-setup ./cmd/ssh-key-setup
 # X11 also works in a Wayland desktop through XWayland.
 RUN go build -tags gui,x11 -trimpath -ldflags="-s -w" -o /out/ssh-key-setup-gui ./cmd/ssh-key-setup-gui
+RUN cd /out && sha256sum ssh-key-setup ssh-key-setup-gui > SHA256SUMS
 
 FROM scratch
 COPY --from=build /out/ /

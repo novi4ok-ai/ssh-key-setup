@@ -7,7 +7,6 @@ import (
 	"net"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"time"
 
@@ -24,8 +23,8 @@ type Event struct {
 }
 
 type Result struct {
-	KeyPath, PublicKeyPath, Fingerprint, Command, BackupPath string
-	AlreadyInstalled                                         bool
+	KeyPath, PublicKeyPath, ConfigPath, Fingerprint, Command, BackupPath string
+	AlreadyInstalled                                                     bool
 }
 
 type Service struct {
@@ -165,8 +164,12 @@ func (s Service) Run(ctx context.Context, in Input, report func(Event)) (result 
 		return result, fmt.Errorf("ключ установлен, но вход по нему не подтверждён: %w. Проверьте PubkeyAuthentication, AuthorizedKeysFile и правила доступа на сервере. Локальный ключ сохранён: %s", err, keyPath)
 	}
 	closeVerified()
-	result.Command = connectCommand(c, keyPath)
-	emit(4, true, "Готово! Новое подключение по ключу успешно")
+	result.ConfigPath, err = configureClient(dir, c, keyPath)
+	if err != nil {
+		return result, fmt.Errorf("ключ установлен и проверен, но не удалось настроить обычную команду ssh: %w. Подключиться можно так: %s", err, explicitConnectCommand(c, keyPath))
+	}
+	result.Command = "ssh " + c.User + "@" + c.Host
+	emit(4, true, "Готово! Вход по ключу и обычная команда ssh настроены")
 	return result, nil
 }
 
@@ -211,6 +214,6 @@ func connectionError(err error) error {
 	return fmt.Errorf("SSH-подключение: %w", err)
 }
 
-func connectCommand(c Config, keyPath string) string {
-	return "ssh -o IdentitiesOnly=yes -i " + shellQuote(keyPath) + " -p " + strconv.Itoa(c.Port) + " " + shellQuote(c.User+"@"+c.Host)
+func explicitConnectCommand(c Config, keyPath string) string {
+	return fmt.Sprintf("ssh -o IdentitiesOnly=yes -i %s -p %d %s", shellQuote(keyPath), c.Port, shellQuote(c.User+"@"+c.Host))
 }

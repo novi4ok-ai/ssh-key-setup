@@ -69,7 +69,7 @@ func TestParametersAndPasswordStdin(t *testing.T) {
 
 func TestInvalidInputNeverConnects(t *testing.T) {
 	for _, args := range [][]string{
-		nil, {"-unknown"}, {"positional"}, {"-ip", "example.com", "-u", "root", "-p", "secret"},
+		{"-unknown"}, {"positional"}, {"-ip", "example.com", "-u", "root", "-p", "secret"},
 		{"-ip", "127.0.0.1", "-u", "root"},
 		{"-ip", "127.0.0.1", "-u", "root", "-p", ""},
 		{"-ip", "127.0.0.1", "-u", "root", "-p", "secret", "-port", "65536"},
@@ -97,17 +97,18 @@ func TestModeSelection(t *testing.T) {
 		args                        []string
 		graphical, failGUI, wantGUI bool
 		code                        int
+		wantHelp                    bool
 	}{
-		{"desktop", nil, true, false, true, 0},
-		{"headless", nil, false, false, false, 2},
-		{"fallback", nil, true, true, true, 2},
-		{"forced failure", []string{"-gui"}, true, true, true, 1},
-		{"forced console", []string{"-cli"}, true, false, false, 2},
-		{"help", []string{"--help"}, true, false, false, 0},
-		{"version", []string{"--version"}, true, false, false, 0},
+		{"desktop help", nil, true, false, false, 0, true},
+		{"headless help", nil, false, false, false, 0, true},
+		{"forced failure", []string{"-gui"}, true, true, true, 1, false},
+		{"forced console", []string{"-cli"}, true, false, false, 2, false},
+		{"long help", []string{"--help"}, true, false, false, 0, true},
+		{"short help", []string{"-h"}, true, false, false, 0, true},
+		{"version", []string{"--version"}, true, false, false, 0, false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			a, _, log := testApp(t, "")
+			a, out, log := testApp(t, "")
 			a.Graphical = tc.graphical
 			launched := false
 			a.LaunchGUI = func() error {
@@ -119,6 +120,19 @@ func TestModeSelection(t *testing.T) {
 			}
 			if code := a.Execute(context.Background(), tc.args); code != tc.code || launched != tc.wantGUI {
 				t.Fatalf("exit %d, launched %v: %s", code, launched, log)
+			}
+			if gotHelp := strings.Contains(out.String(), "ИСПОЛЬЗОВАНИЕ"); gotHelp != tc.wantHelp {
+				t.Fatalf("help=%v, stdout=%q", gotHelp, out.String())
+			}
+			if tc.wantHelp {
+				for _, expected := range []string{"-ip <адрес>", "-password-stdin", "ПРИМЕРЫ", "БЕЗОПАСНОСТЬ", "КОДЫ ЗАВЕРШЕНИЯ"} {
+					if !strings.Contains(out.String(), expected) {
+						t.Fatalf("help lacks %q", expected)
+					}
+				}
+				if log.Len() != 0 {
+					t.Fatalf("successful help wrote stderr: %s", log)
+				}
 			}
 		})
 	}

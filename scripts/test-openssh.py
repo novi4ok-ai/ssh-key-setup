@@ -84,7 +84,7 @@ LogLevel VERBOSE
         content = subprocess.check_output(["sudo", "-n", "cat", str(remote_ssh / "authorized_keys")])
         if len(content.splitlines()) != 2:
             raise RuntimeError("Existing key was lost or a duplicate was appended")
-        print("OpenSSH: password with edge spaces, installation, backup, repeat, system SSH client and wrong password: PASS")
+        print("OpenSSH: installation, backup, repeat, plain ssh command, CLI password modes and wrong password: PASS")
     except Exception:
         if (root / "server.log").exists():
             print((root / "server.log").read_text(), flush=True)

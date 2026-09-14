@@ -32,30 +32,33 @@ func (a App) Execute(ctx context.Context, args []string) int {
 	flags.StringVar(&in.User, "u", "", "Пользователь на сервере")
 	flags.StringVar(&in.Password, "p", "", "Пароль сервера")
 	flags.StringVar(&in.Port, "port", "22", "Порт SSH")
-	console := flags.Bool("cli", false, "Принудительно использовать консоль")
-	gui := flags.Bool("gui", false, "Принудительно открыть графический интерфейс")
+	console := flags.Bool("cli", false, "Запустить интерактивный консольный мастер")
+	gui := flags.Bool("gui", false, "Открыть графический интерфейс")
 	passwordStdin := flags.Bool("password-stdin", false, "Прочитать пароль из первой строки stdin")
 	timeout := flags.Duration("timeout", 90*time.Second, "Тайм-аут настройки, например 90s или 2m")
-	version := flags.Bool("version", false, "Показать версию")
-	flags.Usage = func() {
-		fmt.Fprintln(a.Err, "SSH Key Setup — настройка входа на Linux-сервер по ключу Ed25519.")
-		fmt.Fprintln(a.Err, "Использование: ssh-key-setup [-cli] [-ip IP] [-u USER] [-p PASSWORD] [-port PORT]")
-		fmt.Fprintln(a.Err, "Без параметров: GUI при наличии графики и ssh-key-setup-gui, иначе консольный мастер.")
-		fmt.Fprintln(a.Err, "Недостающие параметры запрашиваются в терминале; пароль вводится без отображения.")
-		flags.PrintDefaults()
+	showVersion := flags.Bool("version", false, "Показать версию")
+	help := flags.Bool("help", false, "Показать эту справку")
+	helpShort := flags.Bool("h", false, "Показать эту справку")
+	// Help has explicit flags so parse errors can stay concise and on stderr.
+	flags.Usage = func() {}
+	if len(args) == 0 {
+		a.printHelp()
+		return 0
 	}
 	if err := flags.Parse(args); err != nil {
-		if errors.Is(err, flag.ErrHelp) {
-			return 0
-		}
+		fmt.Fprintln(a.Err, "Используйте -help, чтобы посмотреть примеры и список параметров.")
 		return 2
 	}
 	failInput := func(message string) int { fmt.Fprintln(a.Err, message); return 2 }
 	if flags.NArg() != 0 {
 		return failInput("Позиционные аргументы не поддерживаются; используйте -ip, -u, -p и -port. См. -help.")
 	}
-	if *version {
-		fmt.Fprintln(a.Out, "SSH Key Setup 1.1.0")
+	if *help || *helpShort {
+		a.printHelp()
+		return 0
+	}
+	if *showVersion {
+		fmt.Fprintln(a.Out, "SSH Key Setup "+version)
 		return 0
 	}
 	provided := make(map[string]bool)
@@ -74,7 +77,7 @@ func (a App) Execute(ctx context.Context, args []string) int {
 			return failInput("Нет графической сессии. Используйте консольный режим.")
 		}
 	}
-	if *gui || (len(args) == 0 && a.Graphical) {
+	if *gui {
 		if a.LaunchGUI == nil {
 			fmt.Fprintln(a.Err, "Графический модуль ssh-key-setup-gui не установлен рядом с программой.")
 		} else if err := a.LaunchGUI(); err == nil {
@@ -85,10 +88,7 @@ func (a App) Execute(ctx context.Context, args []string) int {
 		if ctx.Err() != nil {
 			return 130
 		}
-		if *gui {
-			return 1
-		}
-		fmt.Fprintln(a.Err, "Переходим в консольный режим.")
+		return 1
 	}
 	if err := a.collectInput(ctx, &in, provided, *passwordStdin); err != nil {
 		if ctx.Err() != nil {
@@ -110,6 +110,9 @@ func (a App) Execute(ctx context.Context, args []string) int {
 	in.Password = ""
 	if result.KeyPath != "" {
 		fmt.Fprintln(a.Err, "Закрытый ключ:", result.KeyPath)
+	}
+	if result.ConfigPath != "" {
+		fmt.Fprintln(a.Err, "Конфигурация SSH:", result.ConfigPath)
 	}
 	if result.BackupPath != "" {
 		fmt.Fprintln(a.Err, "Резервная копия на сервере:", result.BackupPath)

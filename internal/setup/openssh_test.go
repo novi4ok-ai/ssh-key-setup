@@ -38,6 +38,13 @@ func TestOpenSSH(t *testing.T) {
 	if output, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("OpenSSH client rejected generated key: %v: %s", err, output)
 	}
+	// This is the normal command users run. The generated config must provide
+	// the port and identity without command-line -i or -p options.
+	cmd = exec.Command("ssh", "-F", first.ConfigPath, "-o", "BatchMode=yes", "-o", "StrictHostKeyChecking=yes",
+		"-o", "UserKnownHostsFile="+filepath.Join(home, ".ssh", "known_hosts"), in.User+"@127.0.0.1", "true")
+	if output, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("plain OpenSSH command did not use generated config: %v: %s", err, output)
+	}
 	if binary := os.Getenv("SSH_SETUP_TEST_CLI"); binary != "" {
 		for _, stdin := range []bool{false, true} {
 			args := []string{"-ip", in.Host, "-u", in.User, "-port", port}

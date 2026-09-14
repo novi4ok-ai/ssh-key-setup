@@ -5,7 +5,6 @@ import os
 from pathlib import Path
 import pty
 import select
-import shutil
 import signal
 import socket
 import subprocess
@@ -21,6 +20,7 @@ class Session:
         env = dict(os.environ, HOME=str(home))
         env.pop("DISPLAY", None)
         env.pop("WAYLAND_DISPLAY", None)
+        env.pop("NO_COLOR", None)
         if graphical:
             env["DISPLAY"] = ":invalid"
 
@@ -66,19 +66,16 @@ def main():
         server.listen()
         port = str(server.getsockname()[1])
 
-        for name in ("wizard", "flags", "cancel-password", "gui-fallback"):
+        for name in ("help", "wizard", "flags", "cancel-password"):
             home = root / name
             home.mkdir()
             executable = binary
-            args = []
+            args = ["-cli"] if name == "wizard" else []
             if name in ("flags", "cancel-password"):
                 args = ["-ip", "127.0.0.1", "-u", "root", "-port", port]
             if name == "flags":
                 args += ["-p", " fixture password "]
-            if name == "gui-fallback":
-                executable = home / "ssh-key-setup"
-                shutil.copy2(binary, executable)
-            session = Session(executable, home, args, graphical=name == "gui-fallback")
+            session = Session(executable, home, args, graphical=name == "help")
             try:
                 if name == "wizard":
                     session.wait_for("IP-адрес сервера:")
@@ -96,9 +93,12 @@ def main():
                         session.send(" fixture password \n")
                 if name in ("wizard", "flags"):
                     session.wait_for("Подключаемся к серверу")
-                if name == "gui-fallback":
-                    session.wait_for("Переходим в консольный режим")
-                    session.wait_for("IP-адрес сервера:")
+                if name == "help":
+                    session.wait_for("КОДЫ ЗАВЕРШЕНИЯ")
+                    assert session.process.wait(timeout=3) == 0
+                    assert b"\x1b[" in session.output, "Terminal help is not styled"
+                    print("Terminal help: PASS", flush=True)
+                    continue
                 session.cancel()
                 assert b"fixture password" not in session.output, "Password leaked to terminal"
                 if name == "flags":
