@@ -1,0 +1,20 @@
+FROM golang:1.26.8 AS toolchain
+
+# glibc 2.28 baseline for AlmaLinux 8 and newer Debian/Ubuntu/AlmaLinux.
+FROM almalinux:8 AS build
+RUN dnf install -y gcc pkgconf-pkg-config mesa-libGL-devel libX11-devel \
+    libXcursor-devel libXrandr-devel libXinerama-devel libXi-devel libXxf86vm-devel \
+    && dnf clean all
+COPY --from=toolchain /usr/local/go /usr/local/go
+ENV PATH="/usr/local/go/bin:${PATH}"
+WORKDIR /src
+COPY go.mod go.sum ./
+RUN go mod download
+COPY cmd ./cmd
+COPY internal ./internal
+RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/ssh-key-setup ./cmd/ssh-key-setup
+# X11 also works in a Wayland desktop through XWayland.
+RUN go build -tags gui,x11 -trimpath -ldflags="-s -w" -o /out/ssh-key-setup-gui ./cmd/ssh-key-setup-gui
+
+FROM scratch
+COPY --from=build /out/ /
