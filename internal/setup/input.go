@@ -2,6 +2,7 @@ package setup
 
 import (
 	"context"
+	"encoding/base64"
 	"fmt"
 	"net"
 	"net/netip"
@@ -11,6 +12,11 @@ import (
 )
 
 type Input struct {
+	EncryptKey, UseAgent              bool
+	Passphrase                        []byte
+	ExpectedFingerprint               string
+	ConfirmHostKey                    func(context.Context, string, string) error
+	RequestPassphrase                 func(context.Context, bool) ([]byte, error)
 	DryRun                            bool
 	RequestPassword                   func(context.Context) (string, error)
 	Host, Port, User, Password, Alias string
@@ -95,6 +101,12 @@ func ValidatePassword(value string) error {
 }
 
 func Normalize(in Input) (Config, error) {
+	if in.ExpectedFingerprint != "" {
+		data, err := base64.RawStdEncoding.DecodeString(strings.TrimPrefix(in.ExpectedFingerprint, "SHA256:"))
+		if !strings.HasPrefix(in.ExpectedFingerprint, "SHA256:") || err != nil || len(data) != 32 {
+			return Config{}, fmt.Errorf("отпечаток должен иметь формат SHA256:…")
+		}
+	}
 	for _, check := range []struct {
 		value    string
 		validate func(string) error

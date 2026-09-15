@@ -90,4 +90,5 @@ func (a App) printHelp() {
 	fmt.Fprintln(a.Out, "\nДИАГНОСТИКА\n  -check  проверить существующий ключ и SSH config без изменения файлов; пароль не нужен")
 	fmt.Fprintln(a.Out, "\nАДРЕСА И ИМЕНА\n  -host <адрес>  IP или DNS-имя (вместо -ip)\n  -alias <имя>   подключаться командой ssh <имя>")
 	fmt.Fprintln(a.Out, "\nПРЕДПРОСМОТР\n  -dry-run  показать ключ, пути и будущий SSH config без сети и записи файлов")
+	fmt.Fprintln(a.Out, "\nЗАЩИТА\n  -fingerprint SHA256:…  сверить отпечаток до отправки пароля\n  -confirm-host-key     подтвердить новый сервер в терминале\n  -protect-key          защитить новый ключ парольной фразой\n  -passphrase-file      прочитать фразу из файла с правами 600/400\n  -agent                использовать ssh-agent; разблокированный ключ хранится один час")
 }

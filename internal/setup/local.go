@@ -2,6 +2,7 @@ package setup
 
 import (
 	"bytes"
+	"context"
 	"crypto/ed25519"
 	"crypto/rand"
 	"crypto/sha256"
@@ -123,6 +124,10 @@ func writeNewPrivate(path string, data []byte) error {
 }
 
 func keyFor(dir string, c Config) (ssh.Signer, string, error) {
+	return keyForAccess(dir, c, &keyAccess{ctx: context.Background()})
+}
+
+func keyForAccess(dir string, c Config, access *keyAccess) (ssh.Signer, string, error) {
 	keyPath := keyFilename(dir, c)
 	data, err := readPrivate(keyPath)
 	var signer ssh.Signer
@@ -131,7 +136,7 @@ func keyFor(dir string, c Config) (ssh.Signer, string, error) {
 		if e != nil {
 			return nil, keyPath, e
 		}
-		block, e := ssh.MarshalPrivateKey(key, "ssh-key-setup")
+		block, e := access.marshal(key)
 		if e != nil {
 			return nil, keyPath, e
 		}
@@ -139,8 +144,11 @@ func keyFor(dir string, c Config) (ssh.Signer, string, error) {
 			return nil, keyPath, e
 		}
 		signer, err = ssh.NewSignerFromKey(key)
+		if err == nil {
+			err = access.add(key)
+		}
 	} else if err == nil {
-		signer, err = ssh.ParsePrivateKey(data)
+		signer, err = access.parse(data)
 		clear(data)
 		if err == nil && signer.PublicKey().Type() != ssh.KeyAlgoED25519 {
 			err = fmt.Errorf("существующий ключ не Ed25519")

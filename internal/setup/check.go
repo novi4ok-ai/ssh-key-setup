@@ -58,6 +58,11 @@ func (s Service) Check(ctx context.Context, in Input, report func(Event)) (resul
 	if err != nil {
 		return result, err
 	}
+	access, err := newKeyAccess(ctx, in)
+	if err != nil {
+		return result, err
+	}
+	defer access.close()
 	dir, err := s.inspectDir()
 	if err != nil {
 		return result, err
@@ -67,7 +72,7 @@ func (s Service) Check(ctx context.Context, in Input, report func(Event)) (resul
 	if err != nil {
 		return result, fmt.Errorf("локальный ключ недоступен; сначала выполните настройку: %w", err)
 	}
-	signer, err := ssh.ParsePrivateKey(data)
+	signer, err := access.parse(data)
 	clear(data)
 	if err != nil {
 		return result, fmt.Errorf("не удалось открыть ключ: %w", err)
@@ -83,6 +88,9 @@ func (s Service) Check(ctx context.Context, in Input, report func(Event)) (resul
 	}
 	_, closeClient, err := s.connect(ctx, c, []ssh.AuthMethod{ssh.PublicKeys(signer)}, func(host string, addr net.Addr, key ssh.PublicKey) error {
 		result.Fingerprint = ssh.FingerprintSHA256(key)
+		if in.ExpectedFingerprint != "" && result.Fingerprint != in.ExpectedFingerprint {
+			return fmt.Errorf("отпечаток сервера не совпадает с ожидаемым")
+		}
 		return trusted(host, addr, key)
 	})
 	if err != nil {

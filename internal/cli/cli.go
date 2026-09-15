@@ -36,6 +36,11 @@ func (a App) Execute(ctx context.Context, args []string) int {
 	flags.StringVar(&in.Port, "port", "22", "Порт SSH")
 	flags.BoolVar(&in.Check, "check", false, "Проверить вход по ключу и SSH config без изменений")
 	flags.BoolVar(&in.DryRun, "dry-run", false, "Показать план без подключения и изменений")
+	flags.BoolVar(&in.EncryptKey, "protect-key", false, "Защитить новый ключ парольной фразой")
+	flags.BoolVar(&in.UseAgent, "agent", false, "Использовать ssh-agent; добавить разблокированный ключ на час")
+	flags.StringVar(&in.ExpectedFingerprint, "fingerprint", "", "Ожидаемый SHA256-отпечаток сервера")
+	confirmHost := flags.Bool("confirm-host-key", false, "Сверить и подтвердить новый ключ сервера")
+	phraseFile := flags.String("passphrase-file", "", "Защищённый файл с парольной фразой ключа")
 	console := flags.Bool("cli", false, "Запустить интерактивный консольный мастер")
 	gui := flags.Bool("gui", false, "Открыть графический интерфейс")
 	passwordStdin := flags.Bool("password-stdin", false, "Прочитать пароль из первой строки stdin")
@@ -82,11 +87,14 @@ func (a App) Execute(ctx context.Context, args []string) int {
 	if in.Check && in.DryRun {
 		return failInput("-check и -dry-run нельзя совмещать.")
 	}
+	if in.Check && (in.EncryptKey || *confirmHost) {
+		return failInput("-check не создаёт ключи и не подтверждает неизвестные серверы.")
+	}
 	if (in.Check || in.DryRun) && (provided["p"] || *passwordStdin) {
 		return failInput("Для -check и -dry-run пароль сервера не нужен.")
 	}
 	if *gui {
-		if in.Check || in.DryRun || provided["alias"] || *console || provided["ip"] || provided["u"] || provided["p"] || provided["port"] || provided["timeout"] || *passwordStdin {
+		if in.EncryptKey || in.UseAgent || provided["fingerprint"] || *confirmHost || provided["passphrase-file"] || in.Check || in.DryRun || provided["alias"] || *console || provided["ip"] || provided["u"] || provided["p"] || provided["port"] || provided["timeout"] || *passwordStdin {
 			return failInput("-gui нельзя совмещать с параметрами консольного режима.")
 		}
 		if !a.Graphical {
@@ -106,6 +114,10 @@ func (a App) Execute(ctx context.Context, args []string) int {
 		}
 		return 1
 	}
+	if err := a.configureSecurity(&in, *confirmHost, *phraseFile); err != nil {
+		return failInput(err.Error())
+	}
+	defer clear(in.Passphrase)
 	if err := a.collectInput(ctx, &in, provided, *passwordStdin); err != nil {
 		if ctx.Err() != nil {
 			fmt.Fprintln(a.Err, "Ввод отменён.")

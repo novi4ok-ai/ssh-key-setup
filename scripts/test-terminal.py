@@ -107,6 +107,19 @@ def main():
             finally:
                 session.close()
 
+        # Ctrl+C may flush a password line between poll readiness and read.
+        for attempt in range(20):
+            home = root / f"cancel-race-{attempt}"
+            home.mkdir()
+            session = Session(binary, home, ["-ip", "127.0.0.1", "-u", "root", "-port", port])
+            try:
+                session.wait_for("Пароль сервера:")
+                session.send(" fixture password \n")
+                session.cancel()
+            finally:
+                session.close()
+        print("Terminal password/Ctrl+C race (20 attempts): PASS", flush=True)
+
 
 if __name__ == "__main__":
     main()

@@ -66,6 +66,11 @@ func (s Service) Run(ctx context.Context, in Input, report func(Event)) (result 
 	if err != nil {
 		return result, err
 	}
+	access, err := newKeyAccess(ctx, in)
+	if err != nil {
+		return result, err
+	}
+	defer access.close()
 	home := s.Home
 	if home == "" {
 		home, err = os.UserHomeDir()
@@ -96,6 +101,9 @@ func (s Service) Run(ctx context.Context, in Input, report func(Event)) (result 
 			return err
 		}
 		result.Fingerprint = ssh.FingerprintSHA256(key)
+		if in.ExpectedFingerprint != "" && result.Fingerprint != in.ExpectedFingerprint {
+			return fmt.Errorf("отпечаток сервера не совпадает с ожидаемым; пароль не отправлен")
+		}
 		err = check(hostname, remote, key)
 		if err == nil {
 			return nil
@@ -106,6 +114,11 @@ func (s Service) Run(ctx context.Context, in Input, report func(Event)) (result 
 		}
 		if len(keyErr.Want) > 0 {
 			return fmt.Errorf("ключ сервера изменился! Сохранён: %s; получен: %s. Пароль не отправлен. Проверьте сервер и запись в %s", ssh.FingerprintSHA256(keyErr.Want[0].Key), result.Fingerprint, knownPath)
+		}
+		if in.ConfirmHostKey != nil {
+			if err := in.ConfirmHostKey(ctx, hostname, result.Fingerprint); err != nil {
+				return err
+			}
 		}
 		// Trust on first use, as explicitly requested. Hash the address on disk.
 		out, err := openPrivate(knownPath, unix.O_RDWR|unix.O_APPEND)
@@ -142,7 +155,7 @@ func (s Service) Run(ctx context.Context, in Input, report func(Event)) (result 
 		keyPath := keyFilename(dir, c)
 		data, readErr := readPrivate(keyPath)
 		if readErr == nil {
-			signer, parseErr := ssh.ParsePrivateKey(data)
+			signer, parseErr := access.parse(data)
 			clear(data)
 			if parseErr != nil {
 				return result, fmt.Errorf("сохранённый ключ: %w", parseErr)
@@ -150,7 +163,7 @@ func (s Service) Run(ctx context.Context, in Input, report func(Event)) (result 
 			_, closeExisting, keyErr := s.connect(ctx, c, []ssh.AuthMethod{ssh.PublicKeys(signer)}, trust)
 			if keyErr == nil {
 				closeExisting()
-				_, result.KeyPath, err = keyFor(dir, c)
+				_, result.KeyPath, err = keyForAccess(dir, c, access)
 				if err != nil {
 					return result, err
 				}
@@ -190,7 +203,7 @@ func (s Service) Run(ctx context.Context, in Input, report func(Event)) (result 
 		return result, err
 	}
 	emit(2, false, "Подготавливаем ключ Ed25519…")
-	signer, keyPath, err := keyFor(dir, c)
+	signer, keyPath, err := keyForAccess(dir, c, access)
 	result.KeyPath = keyPath
 	if err != nil {
 		return result, err

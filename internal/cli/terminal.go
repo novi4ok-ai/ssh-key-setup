@@ -31,10 +31,19 @@ func (a App) readPassword(ctx context.Context, prompt string) (string, error) {
 // Poll allows cancellation during terminal/pipe input without a blocked
 // goroutine. Read one byte at a time so later password input is not buffered.
 func readLine(ctx context.Context, file *os.File) (string, error) {
+	fd := int(file.Fd())
+	flags, err := unix.FcntlInt(uintptr(fd), unix.F_GETFL, 0)
+	if err != nil {
+		return "", err
+	}
+	if err := unix.SetNonblock(fd, true); err != nil {
+		return "", err
+	}
+	defer unix.FcntlInt(uintptr(fd), unix.F_SETFL, flags)
 	var data []byte
 	defer func() { clear(data) }()
 	var b [1]byte
-	fds := []unix.PollFd{{Fd: int32(file.Fd()), Events: unix.POLLIN}}
+	fds := []unix.PollFd{{Fd: int32(fd), Events: unix.POLLIN}}
 	for {
 		if err := ctx.Err(); err != nil {
 			return "", err
@@ -49,7 +58,15 @@ func readLine(ctx context.Context, file *os.File) (string, error) {
 		if n == 0 {
 			continue
 		}
-		n, err = file.Read(b[:])
+		// A signal can flush canonical terminal input after Poll reports it.
+		// A nonblocking syscall keeps that race cancellable.
+		n, err = unix.Read(fd, b[:])
+		if errors.Is(err, unix.EAGAIN) || errors.Is(err, unix.EINTR) {
+			continue
+		}
+		if n == 0 && err == nil {
+			err = io.EOF
+		}
 		if n > 0 {
 			if b[0] == '\n' {
 				return strings.TrimSuffix(string(data), "\r"), nil

@@ -25,6 +25,9 @@ func (s Service) Preview(ctx context.Context, in Input) (result Result, err erro
 	}
 	keyPath := keyFilename(dir, c)
 	keyAction := "создать новый ключ Ed25519"
+	if in.EncryptKey {
+		keyAction += " с парольной фразой"
+	}
 	data, err := readLocal(keyPath, false)
 	clear(data)
 	if err == nil {
