@@ -100,6 +100,9 @@ func (s Service) Check(ctx context.Context, in Input, report func(Event)) (resul
 }
 
 func connectCommand(c Config) string {
+	if c.Alias != "" {
+		return "ssh " + c.Alias
+	}
 	return "ssh " + strings.ReplaceAll(c.User, "$", "\\$") + "@" + c.Host
 }
 
@@ -107,7 +110,11 @@ func checkClientConfig(ctx context.Context, filename string, c Config, keyPath s
 	if _, err := readLocal(filename, false); err != nil {
 		return fmt.Errorf("SSH config: %w", err)
 	}
-	cmd := exec.CommandContext(ctx, "ssh", "-G", "-F", filename, c.User+"@"+c.Host)
+	target := c.User + "@" + c.Host
+	if c.Alias != "" {
+		target = c.Alias
+	}
+	cmd := exec.CommandContext(ctx, "ssh", "-G", "-F", filename, target)
 	output, err := cmd.Output()
 	if err != nil {
 		return fmt.Errorf("не удалось проверить конфигурацию системным ssh -G: %w", err)

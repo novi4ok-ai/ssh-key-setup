@@ -10,21 +10,42 @@ import (
 )
 
 type Input struct {
-	Host, Port, User, Password string
-	Check                      bool
+	Host, Port, User, Password, Alias string
+	Check                             bool
 }
 
 type Config struct {
-	Host, User, Password string
-	Port                 int
+	Host, User, Password, Alias string
+	Port                        int
 }
 
 var loginPattern = regexp.MustCompile(`^[a-zA-Z_][a-zA-Z0-9_.-]{0,63}\$?$`)
+var aliasPattern = regexp.MustCompile(`^[a-zA-Z][a-zA-Z0-9_-]{0,63}$`)
+var dnsLabelPattern = regexp.MustCompile(`^[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?$`)
+
+func ValidateAlias(value string) error {
+	if value != "" && !aliasPattern.MatchString(value) {
+		return fmt.Errorf("Имя подключения: до 64 латинских букв, цифр, _ и -; первая — буква")
+	}
+	return nil
+}
 
 func ValidateHost(value string) error {
-	addr, err := netip.ParseAddr(strings.TrimSpace(value))
-	if err != nil || addr.Zone() != "" {
-		return fmt.Errorf("Введите IPv4 или IPv6 без пробелов внутри, например 192.168.1.10")
+	value = strings.TrimSpace(value)
+	addr, err := netip.ParseAddr(value)
+	if err != nil {
+		name := strings.TrimSuffix(value, ".")
+		valid := len(name) > 0 && len(name) <= 253 && strings.ContainsAny(strings.ToLower(name), "abcdefghijklmnopqrstuvwxyz")
+		for _, label := range strings.Split(name, ".") {
+			valid = valid && dnsLabelPattern.MatchString(label)
+		}
+		if valid {
+			return nil
+		}
+		return fmt.Errorf("Введите IPv4, IPv6 или DNS-имя без пробелов внутри, например server.example.com")
+	}
+	if addr.Zone() != "" {
+		return fmt.Errorf("IPv6 zone ID в этой версии не поддерживается")
 	}
 	addr = addr.Unmap()
 	if addr.IsUnspecified() || addr.IsMulticast() {
@@ -75,7 +96,7 @@ func Normalize(in Input) (Config, error) {
 		value    string
 		validate func(string) error
 	}{
-		{in.Host, ValidateHost}, {in.Port, ValidatePort}, {in.User, ValidateUser},
+		{in.Host, ValidateHost}, {in.Port, ValidatePort}, {in.User, ValidateUser}, {in.Alias, ValidateAlias},
 	} {
 		if err := check.validate(check.value); err != nil {
 			return Config{}, err
@@ -86,12 +107,15 @@ func Normalize(in Input) (Config, error) {
 			return Config{}, err
 		}
 	}
-	addr, _ := netip.ParseAddr(strings.TrimSpace(in.Host))
+	host := strings.ToLower(strings.TrimSuffix(strings.TrimSpace(in.Host), "."))
+	if addr, err := netip.ParseAddr(strings.TrimSpace(in.Host)); err == nil {
+		host = addr.Unmap().String()
+	}
 	port := 22
 	if p := strings.TrimSpace(in.Port); p != "" {
 		port, _ = strconv.Atoi(p)
 	}
-	return Config{Host: addr.Unmap().String(), Port: port, User: strings.TrimSpace(in.User), Password: in.Password}, nil
+	return Config{Host: host, Port: port, User: strings.TrimSpace(in.User), Password: in.Password, Alias: strings.ToLower(in.Alias)}, nil
 }
 
 func (c Config) Address() string { return net.JoinHostPort(c.Host, strconv.Itoa(c.Port)) }

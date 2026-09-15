@@ -29,6 +29,8 @@ func (a App) Execute(ctx context.Context, args []string) int {
 	flags.SetOutput(a.Err)
 	var in setup.Input
 	flags.StringVar(&in.Host, "ip", "", "IP-адрес сервера (IPv4 или IPv6)")
+	flags.StringVar(&in.Host, "host", "", "IP-адрес или DNS-имя сервера")
+	flags.StringVar(&in.Alias, "alias", "", "Короткое имя подключения для ssh")
 	flags.StringVar(&in.User, "u", "", "Пользователь на сервере")
 	flags.StringVar(&in.Password, "p", "", "Пароль сервера")
 	flags.StringVar(&in.Port, "port", "22", "Порт SSH")
@@ -64,6 +66,12 @@ func (a App) Execute(ctx context.Context, args []string) int {
 	}
 	provided := make(map[string]bool)
 	flags.Visit(func(f *flag.Flag) { provided[f.Name] = true })
+	if provided["host"] && provided["ip"] {
+		return failInput("Укажите только один адрес: -host или -ip.")
+	}
+	if provided["host"] {
+		provided["ip"] = true
+	}
 	if *timeout <= 0 {
 		return failInput("Тайм-аут должен быть больше нуля.")
 	}
@@ -74,7 +82,7 @@ func (a App) Execute(ctx context.Context, args []string) int {
 		return failInput("-check проверяет только вход по ключу; пароль сервера не нужен.")
 	}
 	if *gui {
-		if in.Check || *console || provided["ip"] || provided["u"] || provided["p"] || provided["port"] || provided["timeout"] || *passwordStdin {
+		if in.Check || provided["alias"] || *console || provided["ip"] || provided["u"] || provided["p"] || provided["port"] || provided["timeout"] || *passwordStdin {
 			return failInput("-gui нельзя совмещать с параметрами консольного режима.")
 		}
 		if !a.Graphical {

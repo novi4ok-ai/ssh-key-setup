@@ -87,4 +87,5 @@ func (a App) printHelp() {
 		heading("БЕЗОПАСНОСТЬ"), heading("КОДЫ ЗАВЕРШЕНИЯ"),
 	)
 	fmt.Fprintln(a.Out, "\nДИАГНОСТИКА\n  -check  проверить существующий ключ и SSH config без изменения файлов; пароль не нужен")
+	fmt.Fprintln(a.Out, "\nАДРЕСА И ИМЕНА\n  -host <адрес>  IP или DNS-имя (вместо -ip)\n  -alias <имя>   подключаться командой ssh <имя>")
 }

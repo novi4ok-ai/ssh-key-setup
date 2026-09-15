@@ -70,7 +70,7 @@ func TestParametersAndPasswordStdin(t *testing.T) {
 
 func TestInvalidInputNeverConnects(t *testing.T) {
 	for _, args := range [][]string{
-		{"-unknown"}, {"positional"}, {"-ip", "example.com", "-u", "root", "-p", "secret"},
+		{"-unknown"}, {"positional"}, {"-ip", "bad..host", "-u", "root", "-p", "secret"},
 		{"-ip", "127.0.0.1", "-u", "root"},
 		{"-ip", "127.0.0.1", "-u", "root", "-p", ""},
 		{"-ip", "127.0.0.1", "-u", "root", "-p", "secret", "-port", "65536"},

@@ -171,11 +171,22 @@ func keyFilename(dir string, c Config) string {
 }
 
 func configureClient(dir string, c Config, keyPath string) (string, error) {
-	quotedKey, err := sshConfigQuote(keyPath)
+	begin, end, block, err := clientBlock(c, keyPath)
 	if err != nil {
 		return "", err
 	}
+	return writeClientConfig(dir, begin, end, block)
+}
+
+func clientBlock(c Config, keyPath string) (string, string, []byte, error) {
+	quotedKey, err := sshConfigQuote(keyPath)
+	if err != nil {
+		return "", "", nil, err
+	}
 	id := filepath.Base(keyPath)
+	if c.Alias != "" {
+		id = "alias-" + c.Alias
+	}
 	begin := "# >>> ssh-key-setup " + id
 	end := "# <<< ssh-key-setup " + id
 	block := []byte(begin + "\n" +
@@ -186,7 +197,16 @@ func configureClient(dir string, c Config, keyPath string) (string, error) {
 		"    IdentityFile " + quotedKey + "\n" +
 		"    IdentitiesOnly yes\n\n" +
 		"Host *\n" + end + "\n\n")
+	if c.Alias != "" {
+		block = []byte(begin + "\nHost " + c.Alias + "\n" +
+			"    HostName " + c.Host + "\n    User " + c.User + "\n" +
+			"    Port " + strconv.Itoa(c.Port) + "\n    IdentityFile " + quotedKey + "\n" +
+			"    IdentitiesOnly yes\nHost *\n" + end + "\n\n")
+	}
+	return begin, end, block, nil
+}
 
+func writeClientConfig(dir, begin, end string, block []byte) (string, error) {
 	filename := filepath.Join(dir, "config")
 	original, err := readPrivate(filename)
 	exists := err == nil

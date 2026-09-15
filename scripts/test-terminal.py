@@ -79,7 +79,7 @@ def main():
             try:
                 if name == "wizard":
                     session.wait_for("IP-адрес сервера:")
-                    session.send("invalid\n")
+                    session.send("bad..host\n")
                     session.wait_for("Введите IPv4")
                     session.send("127.0.0.1\n")
                     session.wait_for("Порт SSH [22]:")
