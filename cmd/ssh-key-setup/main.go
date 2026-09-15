@@ -7,6 +7,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"syscall"
+	"time"
 
 	"ssh-key-setup/internal/cli"
 	"ssh-key-setup/internal/setup"
@@ -25,10 +26,17 @@ func run() int {
 			if err != nil {
 				return err
 			}
-			cmd := exec.CommandContext(ctx, filepath.Join(filepath.Dir(executable), "ssh-key-setup-gui"))
+			cmd := guiCommand(ctx, filepath.Join(filepath.Dir(executable), "ssh-key-setup-gui"))
 			cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
 			return cmd.Run()
 		},
 	}
 	return a.Execute(ctx, os.Args[1:])
+}
+
+func guiCommand(ctx context.Context, executable string) *exec.Cmd {
+	cmd := exec.CommandContext(ctx, executable)
+	cmd.Cancel = func() error { return cmd.Process.Signal(syscall.SIGTERM) }
+	cmd.WaitDelay = 5 * time.Second
+	return cmd
 }

@@ -7,7 +7,7 @@ import (
 	"golang.org/x/term"
 )
 
-const version = "1.1.0"
+const version = "1.2.0"
 
 func (a App) printHelp() {
 	color := false
@@ -71,7 +71,7 @@ func (a App) printHelp() {
 		command("ssh-key-setup -cli"),
 		command("ssh-key-setup -gui"),
 		heading("ПАРАМЕТРЫ"),
-		"-ip <адрес>", "IPv4 или IPv6 сервера",
+		"-ip <адрес>", "IPv4, IPv6 или DNS-имя сервера (также -host)",
 		"-u <пользователь>", "имя пользователя на сервере",
 		"-p <пароль>", "пароль сервера; безопаснее скрытый ввод",
 		"-port <порт>", "порт SSH (по умолчанию 22)",

@@ -73,6 +73,24 @@ func TestOpenSSH(t *testing.T) {
 				t.Fatalf("CLI (stdin=%v) failed: %v", stdin, err)
 			}
 		}
+		for _, mode := range []struct {
+			args     []string
+			expected string
+		}{
+			{nil, first.Command},
+			{[]string{"-check"}, first.Command},
+			{[]string{"-alias", "work", "-fingerprint", first.Fingerprint}, "ssh work"},
+			{[]string{"-check", "-alias", "work"}, "ssh work"},
+			{[]string{"-dry-run", "-alias", "work"}, "ПРЕДПРОСМОТР"},
+		} {
+			args := append([]string{"-host", in.Host, "-u", in.User, "-port", port}, mode.args...)
+			cli := exec.Command(binary, args...)
+			cli.Env = append(os.Environ(), "HOME="+home)
+			output, err := cli.Output()
+			if err != nil || !strings.HasPrefix(strings.TrimSpace(string(output)), mode.expected) {
+				t.Fatalf("CLI mode %v failed: %v", mode.args, err)
+			}
+		}
 		cli := exec.Command(binary, "-ip", in.Host, "-u", in.User, "-port", port, "-p", "wrong password")
 		cli.Env = append(os.Environ(), "HOME="+home)
 		output, err := cli.Output()

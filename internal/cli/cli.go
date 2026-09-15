@@ -199,7 +199,7 @@ func (a App) collectInput(ctx context.Context, in *setup.Input, provided map[str
 		value        *string
 		validate     func(string) error
 	}{
-		{"ip", "IP-адрес сервера: ", &in.Host, setup.ValidateHost},
+		{"ip", "Адрес сервера (IP или DNS): ", &in.Host, setup.ValidateHost},
 		{"port", "Порт SSH [22]: ", &in.Port, setup.ValidatePort},
 		{"u", "Пользователь: ", &in.User, setup.ValidateUser},
 		{"p", "Пароль сервера: ", &in.Password, setup.ValidatePassword},

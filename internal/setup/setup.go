@@ -78,6 +78,9 @@ func (s Service) Run(ctx context.Context, in Input, report func(Event)) (result 
 			return result, err
 		}
 	}
+	if _, err := sshConfigQuote(home); err != nil {
+		return result, fmt.Errorf("домашний каталог несовместим с SSH config: %w", err)
+	}
 	dir, unlock, err := prepareLocal(home)
 	if err != nil {
 		return result, fmt.Errorf("локальный каталог SSH: %w", err)
@@ -147,7 +150,7 @@ func (s Service) Run(ctx context.Context, in Input, report func(Event)) (result 
 		if err = out.Sync(); err != nil {
 			return err
 		}
-		emit(1, false, "Новый ключ сервера принят и сохранён автоматически")
+		emit(1, false, "Новый ключ сервера принят и сохранён")
 		return nil
 	}
 	emit(1, false, "Подключаемся к серверу…")

@@ -14,6 +14,7 @@ import (
 
 	"golang.org/x/crypto/ssh"
 	"golang.org/x/crypto/ssh/knownhosts"
+	"golang.org/x/sys/unix"
 )
 
 // inspectDir never creates files or repairs permissions.
@@ -68,7 +69,7 @@ func (s Service) Check(ctx context.Context, in Input, report func(Event)) (resul
 		return result, err
 	}
 	result.KeyPath = keyFilename(dir, c)
-	data, err := readLocal(result.KeyPath, false)
+	data, err := readDiagnosticKey(result.KeyPath)
 	if err != nil {
 		return result, fmt.Errorf("локальный ключ недоступен; сначала выполните настройку: %w", err)
 	}
@@ -112,6 +113,22 @@ func connectCommand(c Config) string {
 		return "ssh " + c.Alias
 	}
 	return "ssh " + strings.ReplaceAll(c.User, "$", "\\$") + "@" + c.Host
+}
+
+func readDiagnosticKey(filename string) ([]byte, error) {
+	f, err := openLocal(filename, unix.O_RDONLY, false)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+	info, err := f.Stat()
+	if err != nil {
+		return nil, err
+	}
+	if info.Mode().Perm()&0077 != 0 {
+		return nil, fmt.Errorf("закрытый ключ доступен другим пользователям; нужны права 600 или 400")
+	}
+	return readLimited(f)
 }
 
 func checkClientConfig(ctx context.Context, filename string, c Config, keyPath string) error {

@@ -91,9 +91,13 @@ func readLocal(path string, repair bool) ([]byte, error) {
 		return nil, err
 	}
 	defer f.Close()
+	return readLimited(f)
+}
+
+func readLimited(f *os.File) ([]byte, error) {
 	data, err := io.ReadAll(io.LimitReader(f, maxFileSize+1))
 	if err == nil && len(data) > maxFileSize {
-		err = fmt.Errorf("файл слишком большой: %s", path)
+		err = fmt.Errorf("файл слишком большой: %s", f.Name())
 	}
 	return data, err
 }
@@ -274,7 +278,7 @@ func writeClientConfig(dir, begin, end string, block []byte) (string, error) {
 }
 
 func sshConfigQuote(value string) (string, error) {
-	if strings.ContainsAny(value, "\x00\r\n") {
+	if strings.ContainsAny(value, "\x00\r\n") || strings.Contains(value, "${") {
 		return "", fmt.Errorf("путь к ключу содержит символ, недопустимый в SSH config")
 	}
 	value = strings.ReplaceAll(value, "\\", "\\\\")

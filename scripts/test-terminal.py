@@ -78,7 +78,7 @@ def main():
             session = Session(executable, home, args, graphical=name == "help")
             try:
                 if name == "wizard":
-                    session.wait_for("IP-адрес сервера:")
+                    session.wait_for("Адрес сервера (IP или DNS):")
                     session.send("bad..host\n")
                     session.wait_for("Введите IPv4")
                     session.send("127.0.0.1\n")

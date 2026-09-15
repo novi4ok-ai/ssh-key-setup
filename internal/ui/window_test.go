@@ -263,9 +263,9 @@ func TestCancelWhileWaitingForSecret(t *testing.T) {
 	v.Window.Show()
 	test.Tap(v.Start)
 	waitForDialog(t, a, v)
-	v.cancel()
+	v.RequestClose()
 	drainUntilDone(t, a, v)
-	if v.result.Visible() || !strings.Contains(v.Status.Text, "отменена") {
+	if !v.closing || v.result.Visible() || !strings.Contains(v.Status.Text, "отменена") {
 		t.Fatal("secret prompt did not cancel")
 	}
 }

@@ -168,16 +168,7 @@ func New(a fyne.App, run Runner) *View {
 	v.Window.SetContent(container.NewVScroll(inset(content, 24)))
 	v.Window.Resize(fyne.NewSize(1100, 860))
 	v.Window.CenterOnScreen()
-	v.Window.SetCloseIntercept(func() {
-		if v.busy {
-			v.closing = true
-			v.cancel()
-			v.Status.SetText("Завершаем операцию и закрываем окно…")
-		} else {
-			v.Window.SetCloseIntercept(nil)
-			v.Window.Close()
-		}
-	})
+	v.Window.SetCloseIntercept(v.RequestClose)
 	v.Password.OnSubmitted = func(string) {
 		if !v.busy {
 			v.start()
@@ -220,6 +211,18 @@ func (v *View) setBusy(busy bool) {
 
 func (v *View) start() {
 	v.begin(false, false)
+}
+
+// RequestClose runs on the UI thread, both for window-close and process signals.
+func (v *View) RequestClose() {
+	if v.busy {
+		v.closing = true
+		v.cancel()
+		v.Status.SetText("Завершаем операцию и закрываем окно…")
+	} else {
+		v.Window.SetCloseIntercept(nil)
+		v.Window.Close()
+	}
 }
 
 func (v *View) begin(check, preview bool) {
