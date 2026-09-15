@@ -35,6 +35,7 @@ func (a App) Execute(ctx context.Context, args []string) int {
 	flags.StringVar(&in.Password, "p", "", "Пароль сервера")
 	flags.StringVar(&in.Port, "port", "22", "Порт SSH")
 	flags.BoolVar(&in.Check, "check", false, "Проверить вход по ключу и SSH config без изменений")
+	flags.BoolVar(&in.DryRun, "dry-run", false, "Показать план без подключения и изменений")
 	console := flags.Bool("cli", false, "Запустить интерактивный консольный мастер")
 	gui := flags.Bool("gui", false, "Открыть графический интерфейс")
 	passwordStdin := flags.Bool("password-stdin", false, "Прочитать пароль из первой строки stdin")
@@ -78,11 +79,14 @@ func (a App) Execute(ctx context.Context, args []string) int {
 	if *passwordStdin && provided["p"] {
 		return failInput("Используйте только один источник пароля: -p или -password-stdin.")
 	}
-	if in.Check && (provided["p"] || *passwordStdin) {
-		return failInput("-check проверяет только вход по ключу; пароль сервера не нужен.")
+	if in.Check && in.DryRun {
+		return failInput("-check и -dry-run нельзя совмещать.")
+	}
+	if (in.Check || in.DryRun) && (provided["p"] || *passwordStdin) {
+		return failInput("Для -check и -dry-run пароль сервера не нужен.")
 	}
 	if *gui {
-		if in.Check || provided["alias"] || *console || provided["ip"] || provided["u"] || provided["p"] || provided["port"] || provided["timeout"] || *passwordStdin {
+		if in.Check || in.DryRun || provided["alias"] || *console || provided["ip"] || provided["u"] || provided["p"] || provided["port"] || provided["timeout"] || *passwordStdin {
 			return failInput("-gui нельзя совмещать с параметрами консольного режима.")
 		}
 		if !a.Graphical {
@@ -120,6 +124,10 @@ func (a App) Execute(ctx context.Context, args []string) int {
 		}
 	})
 	in.Password = ""
+	if in.DryRun && err == nil {
+		fmt.Fprint(a.Out, result.Preview)
+		return 0
+	}
 	if result.KeyPath != "" {
 		fmt.Fprintln(a.Err, "Закрытый ключ:", result.KeyPath)
 	}
@@ -184,7 +192,7 @@ func (a App) collectInput(ctx context.Context, in *setup.Input, provided map[str
 		{"u", "Пользователь: ", &in.User, setup.ValidateUser},
 		{"p", "Пароль сервера: ", &in.Password, setup.ValidatePassword},
 	} {
-		if field.name == "p" && in.Check {
+		if field.name == "p" && (in.Check || in.DryRun) {
 			continue
 		}
 		if field.name == "p" && !provided["p"] && !passwordStdin {

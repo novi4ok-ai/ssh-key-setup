@@ -11,6 +11,7 @@ import (
 )
 
 type Input struct {
+	DryRun                            bool
 	RequestPassword                   func(context.Context) (string, error)
 	Host, Port, User, Password, Alias string
 	Check                             bool
@@ -104,7 +105,7 @@ func Normalize(in Input) (Config, error) {
 			return Config{}, err
 		}
 	}
-	if !in.Check && in.Password != "" {
+	if !in.Check && !in.DryRun && in.Password != "" {
 		if err := ValidatePassword(in.Password); err != nil {
 			return Config{}, err
 		}

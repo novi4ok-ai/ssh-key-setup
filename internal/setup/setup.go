@@ -23,6 +23,7 @@ type Event struct {
 }
 
 type Result struct {
+	Preview                                                              string
 	KeyPath, PublicKeyPath, ConfigPath, Fingerprint, Command, BackupPath string
 	AlreadyInstalled                                                     bool
 }
@@ -36,6 +37,12 @@ type Service struct {
 var ErrPasswordRequired = errors.New("сохранённый ключ не дал доступа; укажите пароль сервера через -p, -password-stdin или терминал")
 
 func (s Service) Run(ctx context.Context, in Input, report func(Event)) (result Result, retErr error) {
+	if in.Check && in.DryRun {
+		return result, fmt.Errorf("-check и -dry-run нельзя совмещать")
+	}
+	if in.DryRun {
+		return s.Preview(ctx, in)
+	}
 	if in.Check {
 		return s.Check(ctx, in, report)
 	}
