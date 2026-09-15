@@ -1,4 +1,8 @@
-.PHONY: build build-desktop build-compatible run test test-terminal check check-desktop integration test-linux screenshot
+.PHONY: build build-desktop build-compatible run test test-terminal check check-desktop integration test-linux screenshot ci
+
+ci:
+	$(MAKE) test check-desktop test-terminal integration build-desktop
+	cd dist && sha256sum -c SHA256SUMS
 
 build:
 	mkdir -p dist

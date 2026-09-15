@@ -1,0 +1,56 @@
+name: Build and verify SSH Key Setup
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  tests:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Install OpenSSH and desktop build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y openssh-server openssh-client python3 build-essential pkg-config libgl1-mesa-dev xorg-dev libwayland-dev libxkbcommon-dev wayland-protocols
+      - name: Race tests, static checks, terminal, OpenSSH and local builds
+        run: make ci
+
+  compatibility:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - name: Build CLI and desktop against AlmaLinux 8
+        run: make build-compatible
+      - name: Verify checksums
+        working-directory: dist
+        run: sha256sum -c SHA256SUMS
+      - name: Test CLI on supported Linux distributions
+        run: python3 scripts/test-linux.py
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: ssh-key-setup-linux-amd64
+          path: |
+            dist/ssh-key-setup
+            dist/ssh-key-setup-gui
+            dist/SHA256SUMS
+          if-no-files-found: error
+          retention-days: 14
