@@ -55,7 +55,8 @@ func readLine(ctx context.Context, file *os.File) (string, error) {
 				return strings.TrimSuffix(string(data), "\r"), nil
 			}
 			data = append(data, b[0])
-			if len(data) > 4096 {
+			// A CR after 4096 bytes may belong to a CRLF line ending.
+			if len(data) > 4096 && !(len(data) == 4097 && b[0] == '\r') {
 				return "", fmt.Errorf("строка превышает 4096 байт")
 			}
 		}

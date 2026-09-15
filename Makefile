@@ -3,11 +3,17 @@
 build:
 	mkdir -p dist
 	CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o dist/ssh-key-setup ./cmd/ssh-key-setup
-	cd dist && { sha256sum ssh-key-setup; if [ -f ssh-key-setup-gui ]; then sha256sum ssh-key-setup-gui; fi; } > SHA256SUMS
+	cd dist && checksum_file=$$(mktemp .SHA256SUMS.XXXXXX) && \
+		trap 'rm -f "$$checksum_file"' EXIT && \
+		{ sha256sum ssh-key-setup && if [ -f ssh-key-setup-gui ]; then sha256sum ssh-key-setup-gui; fi; } > "$$checksum_file" && \
+		chmod 644 "$$checksum_file" && mv -f "$$checksum_file" SHA256SUMS
 
 build-desktop: build
 	go build -tags gui -trimpath -ldflags="-s -w" -o dist/ssh-key-setup-gui ./cmd/ssh-key-setup-gui
-	cd dist && sha256sum ssh-key-setup ssh-key-setup-gui > SHA256SUMS
+	cd dist && checksum_file=$$(mktemp .SHA256SUMS.XXXXXX) && \
+		trap 'rm -f "$$checksum_file"' EXIT && \
+		sha256sum ssh-key-setup ssh-key-setup-gui > "$$checksum_file" && \
+		chmod 644 "$$checksum_file" && mv -f "$$checksum_file" SHA256SUMS
 
 build-compatible:
 	docker build --output type=local,dest=dist -f Dockerfile.desktop .

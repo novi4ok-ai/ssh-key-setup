@@ -168,7 +168,7 @@ func (s Service) Run(ctx context.Context, in Input, report func(Event)) (result 
 	if err != nil {
 		return result, fmt.Errorf("ключ установлен и проверен, но не удалось настроить обычную команду ssh: %w. Подключиться можно так: %s", err, explicitConnectCommand(c, keyPath))
 	}
-	result.Command = "ssh " + c.User + "@" + c.Host
+	result.Command = "ssh " + strings.ReplaceAll(c.User, "$", "\\$") + "@" + c.Host
 	emit(4, true, "Готово! Вход по ключу и обычная команда ssh настроены")
 	return result, nil
 }
@@ -215,5 +215,10 @@ func connectionError(err error) error {
 }
 
 func explicitConnectCommand(c Config, keyPath string) string {
-	return fmt.Sprintf("ssh -o IdentitiesOnly=yes -i %s -p %d %s", shellQuote(keyPath), c.Port, shellQuote(c.User+"@"+c.Host))
+	identity := "-i " + shellQuote(keyPath)
+	if quoted, err := sshConfigQuote(keyPath); err == nil {
+		// -i checks the unexpanded path first, so escaped percent tokens need -o.
+		identity = "-o " + shellQuote("IdentityFile="+quoted)
+	}
+	return fmt.Sprintf("ssh -o IdentitiesOnly=yes %s -p %d %s", identity, c.Port, shellQuote(c.User+"@"+c.Host))
 }

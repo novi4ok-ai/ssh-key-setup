@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -180,8 +181,35 @@ func TestCancelWaitingForStdin(t *testing.T) {
 }
 
 func TestRejectOversizedPasswordStdin(t *testing.T) {
-	a, _, _ := testApp(t, strings.Repeat("x", 4097)+"\n")
-	if code := a.Execute(context.Background(), []string{"-ip", "127.0.0.1", "-u", "root", "-password-stdin"}); code != 2 {
-		t.Fatalf("exit %d", code)
+	for _, input := range []string{
+		strings.Repeat("x", 4097),
+		strings.Repeat("x", 4097) + "\n",
+		strings.Repeat("x", 4097) + "\r\n",
+		strings.Repeat("x", 4096) + "\r",
+	} {
+		a, _, _ := testApp(t, input)
+		if code := a.Execute(context.Background(), []string{"-ip", "127.0.0.1", "-u", "root", "-password-stdin"}); code != 2 {
+			t.Fatalf("exit %d", code)
+		}
+	}
+}
+
+func TestPasswordStdinLengthBoundary(t *testing.T) {
+	for _, ending := range []string{"", "\n", "\r\n"} {
+		t.Run(fmt.Sprintf("ending=%q", ending), func(t *testing.T) {
+			password := strings.Repeat("x", 4096)
+			a, _, log := testApp(t, password+ending)
+			called := false
+			a.Run = func(_ context.Context, in setup.Input, _ func(setup.Event)) (setup.Result, error) {
+				called = true
+				if in.Password != password {
+					t.Fatal("password was changed")
+				}
+				return setup.Result{}, nil
+			}
+			if code := a.Execute(context.Background(), []string{"-ip", "127.0.0.1", "-u", "root", "-password-stdin"}); code != 0 || !called {
+				t.Fatalf("valid 4096-byte password rejected: exit %d: %s", code, log)
+			}
+		})
 	}
 }

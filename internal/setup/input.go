@@ -25,10 +25,11 @@ func ValidateHost(value string) error {
 	if err != nil || addr.Zone() != "" {
 		return fmt.Errorf("Введите IPv4 или IPv6 без пробелов внутри, например 192.168.1.10")
 	}
+	addr = addr.Unmap()
 	if addr.IsUnspecified() || addr.IsMulticast() {
 		return fmt.Errorf("Нужен адрес конкретного сервера, не широковещательный или неопределённый адрес")
 	}
-	if addr.Unmap().String() == "255.255.255.255" {
+	if addr.String() == "255.255.255.255" {
 		return fmt.Errorf("Широковещательный адрес не подходит для SSH")
 	}
 	return nil

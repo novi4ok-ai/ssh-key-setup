@@ -29,7 +29,7 @@ func TestNormalize(t *testing.T) {
 	if c.Host != "192.0.2.1" || c.Port != 2222 || c.User != "ubuntu" || c.Password != in.Password {
 		t.Fatalf("normalization corrupted fields")
 	}
-	for _, host := range []string{"", "192. 0.2.1", "192.0.2.999", "example.com", "0.0.0.0", "::", "ff02::1", "255.255.255.255", "127.0.0.1;id", "fe80::1%eth0"} {
+	for _, host := range []string{"", "192. 0.2.1", "192.0.2.999", "example.com", "0.0.0.0", "::", "ff02::1", "255.255.255.255", "::ffff:0.0.0.0", "::ffff:224.0.0.1", "::ffff:255.255.255.255", "127.0.0.1;id", "fe80::1%eth0"} {
 		if ValidateHost(host) == nil {
 			t.Errorf("accepted bad host %q", host)
 		}
@@ -215,14 +215,14 @@ func (s *testServer) serve(conn net.Conn, key ssh.Signer) {
 	config := &ssh.ServerConfig{
 		PasswordCallback: func(meta ssh.ConnMetadata, password []byte) (*ssh.Permissions, error) {
 			s.passwordCalls.Add(1)
-			if meta.User() != "tester" || string(password) != " secret with spaces " {
+			if (meta.User() != "tester" && meta.User() != "tester$") || string(password) != " secret with spaces " {
 				return nil, fmt.Errorf("authentication rejected")
 			}
 			return nil, nil
 		},
 		PublicKeyCallback: func(meta ssh.ConnMetadata, key ssh.PublicKey) (*ssh.Permissions, error) {
 			s.publicCalls.Add(1)
-			if s.denyPublic.Load() || meta.User() != "tester" {
+			if s.denyPublic.Load() || (meta.User() != "tester" && meta.User() != "tester$") {
 				return nil, fmt.Errorf("public key rejected")
 			}
 			data, _ := os.ReadFile(filepath.Join(s.home, ".ssh", "authorized_keys"))

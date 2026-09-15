@@ -20,7 +20,10 @@ func TestOpenSSH(t *testing.T) {
 		t.Fatal(err)
 	}
 	in := Input{Host: "127.0.0.1", Port: port, User: os.Getenv("SSH_SETUP_TEST_USER"), Password: string(password)}
-	home := t.TempDir()
+	home := filepath.Join(t.TempDir(), "client %h with spaces")
+	if err := os.Mkdir(home, 0700); err != nil {
+		t.Fatal(err)
+	}
 	s := Service{Home: home}
 	first, err := s.Run(context.Background(), in, nil)
 	if err != nil {
@@ -34,14 +37,23 @@ func TestOpenSSH(t *testing.T) {
 		t.Fatalf("repeat: %v", err)
 	}
 	// Also verify that the generated format works with the system OpenSSH client.
-	cmd := exec.Command("ssh", "-F", "/dev/null", "-o", "BatchMode=yes", "-o", "IdentitiesOnly=yes", "-o", "StrictHostKeyChecking=yes", "-o", "UserKnownHostsFile="+filepath.Join(home, ".ssh", "known_hosts"), "-i", first.KeyPath, "-p", port, in.User+"@127.0.0.1", "true")
+	knownHostsOption := "UserKnownHostsFile=\"" + strings.ReplaceAll(filepath.Join(home, ".ssh", "known_hosts"), "%", "%%") + "\""
+	// Exercise the displayed recovery command, including both shell quoting
+	// and OpenSSH's own token expansion, with an isolated client config.
+	c, err := Normalize(in)
+	if err != nil {
+		t.Fatal(err)
+	}
+	recovery := strings.Replace(explicitConnectCommand(c, first.KeyPath), "ssh ",
+		"ssh -F /dev/null -o BatchMode=yes -o StrictHostKeyChecking=yes -o "+shellQuote(knownHostsOption)+" ", 1)
+	cmd := exec.Command("sh", "-c", recovery+" true")
 	if output, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("OpenSSH client rejected generated key: %v: %s", err, output)
 	}
 	// This is the normal command users run. The generated config must provide
 	// the port and identity without command-line -i or -p options.
 	cmd = exec.Command("ssh", "-F", first.ConfigPath, "-o", "BatchMode=yes", "-o", "StrictHostKeyChecking=yes",
-		"-o", "UserKnownHostsFile="+filepath.Join(home, ".ssh", "known_hosts"), in.User+"@127.0.0.1", "true")
+		"-o", knownHostsOption, in.User+"@127.0.0.1", "true")
 	if output, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("plain OpenSSH command did not use generated config: %v: %s", err, output)
 	}

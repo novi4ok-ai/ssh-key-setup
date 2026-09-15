@@ -168,9 +168,9 @@ func configureClient(dir string, c Config, keyPath string) (string, error) {
 	end := "# <<< ssh-key-setup " + id
 	block := []byte(begin + "\n" +
 		"Host " + c.Host + "\n" +
-		"    User " + c.User + "\n" +
-		"    Port " + strconv.Itoa(c.Port) + "\n\n" +
+		"    User " + c.User + "\n\n" +
 		"Match originalhost " + c.Host + " user " + c.User + "\n" +
+		"    Port " + strconv.Itoa(c.Port) + "\n" +
 		"    IdentityFile " + quotedKey + "\n" +
 		"    IdentitiesOnly yes\n\n" +
 		"Host *\n" + end + "\n\n")
@@ -239,6 +239,8 @@ func sshConfigQuote(value string) (string, error) {
 	}
 	value = strings.ReplaceAll(value, "\\", "\\\\")
 	value = strings.ReplaceAll(value, "\"", "\\\"")
+	// OpenSSH expands percent tokens even inside quoted IdentityFile paths.
+	value = strings.ReplaceAll(value, "%", "%%")
 	return "\"" + value + "\"", nil
 }
 
