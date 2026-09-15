@@ -163,7 +163,7 @@ func (a App) collectInput(ctx context.Context, in *setup.Input, provided map[str
 	if !terminal {
 		var missing []string
 		for _, name := range []string{"ip", "u", "p"} {
-			if name == "p" && in.Check {
+			if name == "p" {
 				continue
 			}
 			if !provided[name] && !(name == "p" && passwordStdin) {
@@ -185,6 +185,24 @@ func (a App) collectInput(ctx context.Context, in *setup.Input, provided map[str
 		{"p", "Пароль сервера: ", &in.Password, setup.ValidatePassword},
 	} {
 		if field.name == "p" && in.Check {
+			continue
+		}
+		if field.name == "p" && !provided["p"] && !passwordStdin {
+			if terminal {
+				in.RequestPassword = func(ctx context.Context) (string, error) {
+					for {
+						password, err := a.readPassword(ctx, "Пароль сервера: ")
+						if err != nil {
+							return "", err
+						}
+						if err := setup.ValidatePassword(password); err != nil {
+							fmt.Fprintln(a.Err, err)
+							continue
+						}
+						return password, nil
+					}
+				}
+			}
 			continue
 		}
 		if provided[field.name] || (field.name == "port" && !promptPort) {

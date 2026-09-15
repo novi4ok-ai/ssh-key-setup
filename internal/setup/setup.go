@@ -33,6 +33,8 @@ type Service struct {
 	ConnectionTimeout time.Duration
 }
 
+var ErrPasswordRequired = errors.New("сохранённый ключ не дал доступа; укажите пароль сервера через -p, -password-stdin или терминал")
+
 func (s Service) Run(ctx context.Context, in Input, report func(Event)) (result Result, retErr error) {
 	if in.Check {
 		return s.Check(ctx, in, report)
@@ -129,6 +131,48 @@ func (s Service) Run(ctx context.Context, in Input, report func(Event)) (result 
 		return nil
 	}
 	emit(1, false, "Подключаемся к серверу…")
+	if c.Password == "" {
+		keyPath := keyFilename(dir, c)
+		data, readErr := readPrivate(keyPath)
+		if readErr == nil {
+			signer, parseErr := ssh.ParsePrivateKey(data)
+			clear(data)
+			if parseErr != nil {
+				return result, fmt.Errorf("сохранённый ключ: %w", parseErr)
+			}
+			_, closeExisting, keyErr := s.connect(ctx, c, []ssh.AuthMethod{ssh.PublicKeys(signer)}, trust)
+			if keyErr == nil {
+				closeExisting()
+				_, result.KeyPath, err = keyFor(dir, c)
+				if err != nil {
+					return result, err
+				}
+				result.PublicKeyPath = keyPath + ".pub"
+				result.AlreadyInstalled = true
+				emit(3, true, "Сохранённый ключ работает; пароль сервера не потребовался")
+				if err = finishClientSetup(dir, c, keyPath, &result); err != nil {
+					return result, err
+				}
+				emit(4, true, "Вход по ключу проверен, локальная конфигурация восстановлена")
+				return result, nil
+			}
+			if !strings.Contains(keyErr.Error(), "unable to authenticate") {
+				return result, connectionError(keyErr)
+			}
+		} else if !errors.Is(readErr, os.ErrNotExist) {
+			return result, readErr
+		}
+		if in.RequestPassword == nil {
+			return result, ErrPasswordRequired
+		}
+		c.Password, err = in.RequestPassword(ctx)
+		if err != nil {
+			return result, err
+		}
+		if err = ValidatePassword(c.Password); err != nil {
+			return result, err
+		}
+	}
 	client, closeClient, err := s.connect(ctx, c, []ssh.AuthMethod{ssh.Password(c.Password)}, trust)
 	if err != nil {
 		return result, connectionError(err)
@@ -167,13 +211,21 @@ func (s Service) Run(ctx context.Context, in Input, report func(Event)) (result 
 		return result, fmt.Errorf("ключ установлен, но вход по нему не подтверждён: %w. Проверьте PubkeyAuthentication, AuthorizedKeysFile и правила доступа на сервере. Локальный ключ сохранён: %s", err, keyPath)
 	}
 	closeVerified()
-	result.ConfigPath, err = configureClient(dir, c, keyPath)
-	if err != nil {
-		return result, fmt.Errorf("ключ установлен и проверен, но не удалось настроить обычную команду ssh: %w. Подключиться можно так: %s", err, explicitConnectCommand(c, keyPath))
+	if err = finishClientSetup(dir, c, keyPath, &result); err != nil {
+		return result, err
 	}
-	result.Command = connectCommand(c)
 	emit(4, true, "Готово! Вход по ключу и обычная команда ssh настроены")
 	return result, nil
+}
+
+func finishClientSetup(dir string, c Config, keyPath string, result *Result) error {
+	var err error
+	result.ConfigPath, err = configureClient(dir, c, keyPath)
+	if err != nil {
+		return fmt.Errorf("ключ установлен и проверен, но не удалось настроить обычную команду ssh: %w. Подключиться можно так: %s", err, explicitConnectCommand(c, keyPath))
+	}
+	result.Command = connectCommand(c)
+	return nil
 }
 
 func (s Service) connect(ctx context.Context, c Config, auth []ssh.AuthMethod, hostKey ssh.HostKeyCallback) (*ssh.Client, func(), error) {

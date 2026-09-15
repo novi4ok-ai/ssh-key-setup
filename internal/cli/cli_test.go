@@ -71,7 +71,6 @@ func TestParametersAndPasswordStdin(t *testing.T) {
 func TestInvalidInputNeverConnects(t *testing.T) {
 	for _, args := range [][]string{
 		{"-unknown"}, {"positional"}, {"-ip", "bad..host", "-u", "root", "-p", "secret"},
-		{"-ip", "127.0.0.1", "-u", "root"},
 		{"-ip", "127.0.0.1", "-u", "root", "-p", ""},
 		{"-ip", "127.0.0.1", "-u", "root", "-p", "secret", "-port", "65536"},
 		{"-p", "secret", "-password-stdin"}, {"-timeout", "0s"}, {"-timeout", "bad"},
