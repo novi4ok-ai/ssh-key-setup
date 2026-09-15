@@ -86,4 +86,5 @@ func (a App) printHelp() {
 		command("ssh-key-setup -ip '192.0.2.10' -u 'root' -password-stdin < /run/secrets/server-password"),
 		heading("БЕЗОПАСНОСТЬ"), heading("КОДЫ ЗАВЕРШЕНИЯ"),
 	)
+	fmt.Fprintln(a.Out, "\nДИАГНОСТИКА\n  -check  проверить существующий ключ и SSH config без изменения файлов; пароль не нужен")
 }

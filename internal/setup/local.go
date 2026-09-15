@@ -24,6 +24,10 @@ const maxFileSize = 4 << 20
 
 // Files are opened without following symlinks. Never chmod somebody else's file.
 func openPrivate(path string, flags int) (*os.File, error) {
+	return openLocal(path, flags, true)
+}
+
+func openLocal(path string, flags int, repair bool) (*os.File, error) {
 	fd, err := unix.Open(path, flags|unix.O_NOFOLLOW|unix.O_CLOEXEC|unix.O_NONBLOCK, 0600)
 	if err != nil {
 		return nil, err
@@ -36,7 +40,7 @@ func openPrivate(path string, flags int) (*os.File, error) {
 			err = fmt.Errorf("небезопасный файл: %s (нужен обычный файл текущего пользователя без жёстких ссылок)", path)
 		}
 	}
-	if err == nil {
+	if err == nil && repair {
 		err = f.Chmod(0600)
 	}
 	if err != nil {
@@ -77,7 +81,11 @@ func prepareLocal(home string) (string, func(), error) {
 }
 
 func readPrivate(path string) ([]byte, error) {
-	f, err := openPrivate(path, unix.O_RDONLY)
+	return readLocal(path, true)
+}
+
+func readLocal(path string, repair bool) ([]byte, error) {
+	f, err := openLocal(path, unix.O_RDONLY, repair)
 	if err != nil {
 		return nil, err
 	}
@@ -115,8 +123,7 @@ func writeNewPrivate(path string, data []byte) error {
 }
 
 func keyFor(dir string, c Config) (ssh.Signer, string, error) {
-	id := sha256.Sum256([]byte(c.User + "@" + c.Address()))
-	keyPath := filepath.Join(dir, fmt.Sprintf("ssh-key-setup_%x_ed25519", id[:16]))
+	keyPath := keyFilename(dir, c)
 	data, err := readPrivate(keyPath)
 	var signer ssh.Signer
 	if errors.Is(err, os.ErrNotExist) {
@@ -156,6 +163,11 @@ func keyFor(dir string, c Config) (ssh.Signer, string, error) {
 		return nil, keyPath, err
 	}
 	return signer, keyPath, nil
+}
+
+func keyFilename(dir string, c Config) string {
+	id := sha256.Sum256([]byte(c.User + "@" + c.Address()))
+	return filepath.Join(dir, fmt.Sprintf("ssh-key-setup_%x_ed25519", id[:16]))
 }
 
 func configureClient(dir string, c Config, keyPath string) (string, error) {

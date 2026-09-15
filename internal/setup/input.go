@@ -11,6 +11,7 @@ import (
 
 type Input struct {
 	Host, Port, User, Password string
+	Check                      bool
 }
 
 type Config struct {
@@ -74,9 +75,14 @@ func Normalize(in Input) (Config, error) {
 		value    string
 		validate func(string) error
 	}{
-		{in.Host, ValidateHost}, {in.Port, ValidatePort}, {in.User, ValidateUser}, {in.Password, ValidatePassword},
+		{in.Host, ValidateHost}, {in.Port, ValidatePort}, {in.User, ValidateUser},
 	} {
 		if err := check.validate(check.value); err != nil {
+			return Config{}, err
+		}
+	}
+	if !in.Check {
+		if err := ValidatePassword(in.Password); err != nil {
 			return Config{}, err
 		}
 	}

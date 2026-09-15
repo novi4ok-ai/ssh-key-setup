@@ -34,6 +34,9 @@ type Service struct {
 }
 
 func (s Service) Run(ctx context.Context, in Input, report func(Event)) (result Result, retErr error) {
+	if in.Check {
+		return s.Check(ctx, in, report)
+	}
 	if report == nil {
 		report = func(Event) {}
 	}
@@ -168,7 +171,7 @@ func (s Service) Run(ctx context.Context, in Input, report func(Event)) (result 
 	if err != nil {
 		return result, fmt.Errorf("ключ установлен и проверен, но не удалось настроить обычную команду ssh: %w. Подключиться можно так: %s", err, explicitConnectCommand(c, keyPath))
 	}
-	result.Command = "ssh " + strings.ReplaceAll(c.User, "$", "\\$") + "@" + c.Host
+	result.Command = connectCommand(c)
 	emit(4, true, "Готово! Вход по ключу и обычная команда ssh настроены")
 	return result, nil
 }

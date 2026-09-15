@@ -194,6 +194,19 @@ func TestRejectOversizedPasswordStdin(t *testing.T) {
 	}
 }
 
+func TestCheckDoesNotRequestPassword(t *testing.T) {
+	a, _, log := testApp(t, "")
+	a.Run = func(_ context.Context, in setup.Input, _ func(setup.Event)) (setup.Result, error) {
+		if !in.Check || in.Password != "" {
+			t.Fatal("incorrect check input")
+		}
+		return setup.Result{Command: "ssh tester@127.0.0.1"}, nil
+	}
+	if code := a.Execute(context.Background(), []string{"-check", "-ip", "127.0.0.1", "-u", "tester"}); code != 0 {
+		t.Fatalf("check: %d: %s", code, log)
+	}
+}
+
 func TestPasswordStdinLengthBoundary(t *testing.T) {
 	for _, ending := range []string{"", "\n", "\r\n"} {
 		t.Run(fmt.Sprintf("ending=%q", ending), func(t *testing.T) {

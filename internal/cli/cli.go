@@ -32,6 +32,7 @@ func (a App) Execute(ctx context.Context, args []string) int {
 	flags.StringVar(&in.User, "u", "", "Пользователь на сервере")
 	flags.StringVar(&in.Password, "p", "", "Пароль сервера")
 	flags.StringVar(&in.Port, "port", "22", "Порт SSH")
+	flags.BoolVar(&in.Check, "check", false, "Проверить вход по ключу и SSH config без изменений")
 	console := flags.Bool("cli", false, "Запустить интерактивный консольный мастер")
 	gui := flags.Bool("gui", false, "Открыть графический интерфейс")
 	passwordStdin := flags.Bool("password-stdin", false, "Прочитать пароль из первой строки stdin")
@@ -69,8 +70,11 @@ func (a App) Execute(ctx context.Context, args []string) int {
 	if *passwordStdin && provided["p"] {
 		return failInput("Используйте только один источник пароля: -p или -password-stdin.")
 	}
+	if in.Check && (provided["p"] || *passwordStdin) {
+		return failInput("-check проверяет только вход по ключу; пароль сервера не нужен.")
+	}
 	if *gui {
-		if *console || provided["ip"] || provided["u"] || provided["p"] || provided["port"] || provided["timeout"] || *passwordStdin {
+		if in.Check || *console || provided["ip"] || provided["u"] || provided["p"] || provided["port"] || provided["timeout"] || *passwordStdin {
 			return failInput("-gui нельзя совмещать с параметрами консольного режима.")
 		}
 		if !a.Graphical {
@@ -136,7 +140,11 @@ func (a App) Execute(ctx context.Context, args []string) int {
 	if result.AlreadyInstalled {
 		fmt.Fprintln(a.Err, "Ключ уже установлен; дубликат не добавлен.")
 	}
-	fmt.Fprintln(a.Err, "Готово! Вход по ключу проверен отдельным подключением.")
+	if in.Check {
+		fmt.Fprintln(a.Err, "Проверка завершена. Настройки не изменялись.")
+	} else {
+		fmt.Fprintln(a.Err, "Готово! Вход по ключу проверен отдельным подключением.")
+	}
 	fmt.Fprintln(a.Out, result.Command)
 	return 0
 }
@@ -147,6 +155,9 @@ func (a App) collectInput(ctx context.Context, in *setup.Input, provided map[str
 	if !terminal {
 		var missing []string
 		for _, name := range []string{"ip", "u", "p"} {
+			if name == "p" && in.Check {
+				continue
+			}
 			if !provided[name] && !(name == "p" && passwordStdin) {
 				missing = append(missing, "-"+name)
 			}
@@ -165,6 +176,9 @@ func (a App) collectInput(ctx context.Context, in *setup.Input, provided map[str
 		{"u", "Пользователь: ", &in.User, setup.ValidateUser},
 		{"p", "Пароль сервера: ", &in.Password, setup.ValidatePassword},
 	} {
+		if field.name == "p" && in.Check {
+			continue
+		}
 		if provided[field.name] || (field.name == "port" && !promptPort) {
 			if err := field.validate(*field.value); err != nil {
 				return err
